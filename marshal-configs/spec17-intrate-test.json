@@ -1,0 +1,14 @@
+{
+  "name" : "spec17-intrate-test",
+  "base" : "br-base.json",
+  "workdir" : "..",
+  "host-init" : "build-intrate.sh",
+  "overlay" : "speckle/build/overlay/intrate/ref",
+  "outputs" : ["/output"],
+  "jobs" : [
+    {
+      "name": "500.perlbench_r",
+      "command": "./intrate.sh 500.perlbench_r --copies 4"
+    }
+  ]
+}

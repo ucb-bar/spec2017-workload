@@ -1,0 +1,3 @@
+[submodule "speckle"]
+	path = speckle
+	url = https://github.com/abejgonzalez/Speckle.git
