@@ -4,6 +4,7 @@
   "workdir" : "..",
   "host-init" : "build-intrate.sh",
   "overlay" : "speckle/build/overlay/intrate/ref",
+  "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
   "jobs" : [
     {

@@ -4,6 +4,7 @@
   "workdir" : "..",
   "host-init" : "build-intspeed.sh",
   "overlay" : "speckle/build/overlay/intspeed/ref",
+  "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
   "jobs" : [
     {
