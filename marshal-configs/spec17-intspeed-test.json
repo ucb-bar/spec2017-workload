@@ -1,5 +1,5 @@
 {
-  "name" : "spec17-intspeed",
+  "name" : "spec17-intspeed-test",
   "base" : "br-base.json",
   "workdir" : "..",
   "host-init" : "build-intspeed.sh",
