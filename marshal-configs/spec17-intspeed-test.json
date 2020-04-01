@@ -2,14 +2,54 @@
   "name" : "spec17-intspeed-test",
   "base" : "br-base.json",
   "workdir" : "..",
-  "host-init" : "build-intspeed.sh",
-  "overlay" : "speckle/build/overlay/intspeed/ref",
+  "host-init" : "build-intspeed-test.sh test",
+  "overlay" : "speckle/build/overlay/intspeed/test",
   "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
   "jobs" : [
     {
       "name": "600.perlbench_s",
       "command": "./intspeed.sh 600.perlbench_s --threads 1"
+    },
+    {
+      "name": "602.gcc_s",
+      "command": "./intspeed.sh 602.gcc_s --threads 1"
+    },
+    {
+      "name": "605.mcf_s",
+      "command": "./intspeed.sh 605.mcf_s --threads 1"
+    },
+    {
+      "name": "620.omnetpp_s",
+      "command": "./intspeed.sh 620.omnetpp_s --threads 1"
+    },
+    {
+      "name": "623.xalancbmk_s",
+      "command": "./intspeed.sh 623.xalancbmk_s --threads 1"
+    },
+    {
+      "name": "625.x264_s",
+      "command": "./intspeed.sh 625.x264_s --threads 1"
+    },
+    {
+      "name": "631.deepsjeng_s",
+      "command": "./intspeed.sh 631.deepsjeng_s --threads 1"
+    },
+    {
+      "name": "641.leela_s",
+      "command": "./intspeed.sh 641.leela_s --threads 1"
+    },
+    {
+      "name": "648.exchange2_s",
+      "command": "./intspeed.sh 648.exchange2_s --threads 1"
+    },
+    {
+      "name": "657.xz_s-cpu2006docs",
+      "command": "./intspeed.sh 657.xz_s --workload 0 --threads 1"
+    },
+    {
+      "name": "657.xz_s-cld",
+      "command": "./intspeed.sh 657.xz_s --workload 1 --threads 1"
     }
   ]
 }

@@ -2,8 +2,8 @@
   "name" : "spec17-intrate-test",
   "base" : "br-base.json",
   "workdir" : "..",
-  "host-init" : "build-intrate.sh",
-  "overlay" : "speckle/build/overlay/intrate/ref",
+  "host-init" : "build-intrate.sh test",
+  "overlay" : "speckle/build/overlay/intrate/test",
   "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
   "jobs" : [

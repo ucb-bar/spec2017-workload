@@ -1,0 +1,15 @@
+{
+  "name" : "spec17-intspeed-test",
+  "base" : "br-base.json",
+  "workdir" : "..",
+  "host-init" : "build-intspeed-test.sh test",
+  "overlay" : "speckle/build/overlay/intspeed/test",
+  "rootfs-size" : "3GiB",
+  "outputs" : ["/output"],
+  "jobs" : [
+    {
+      "name": "600.perlbench_s",
+      "command": "./intspeed.sh 600.perlbench_s --threads 1"
+    }
+  ]
+}
