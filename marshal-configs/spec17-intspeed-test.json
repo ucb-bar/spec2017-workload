@@ -6,6 +6,7 @@
   "overlay" : "speckle/build/overlay/intspeed/test",
   "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
+  "post_run_hook" : "handle-results.py",
   "jobs" : [
     {
       "name": "600.perlbench_s",
