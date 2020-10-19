@@ -68,7 +68,7 @@ def handleSpeed(outDir, dataset):
     if dataset == 'test':
         baseline = specSpeedTest
     elif dataset == 'ref':
-        baseline = specSpeedRef
+        baseline = specSpeedReference
     else:
         baselinePath = pathlib.Path(dataset)
         if not baselinePath.exists():
