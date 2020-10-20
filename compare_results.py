@@ -1,6 +1,16 @@
 import pandas as pd
 import argparse
 import pathlib
+import matplotlib
+from matplotlib import pyplot as plt
+
+# Color style similar to ppt color scheme
+plt.style.use('seaborn-colorblind')
+
+#Latex Default Font
+plt.rc('font', family='serif') 
+plt.rc('font', serif='Latin Modern Roman')
+matplotlib.rcParams.update({'font.size': 16})
 
 speedBenches= [
     "600.perlbench_s",
@@ -15,10 +25,24 @@ speedBenches= [
     "657.xz_s"
 ]
 
+speedCleanName = {
+        "600.perlbench_s" : "perl",
+        "602.gcc_s" : "gcc",
+        "605.mcf_s" : "mcf",
+        "620.omnetpp_s" : "omnetpp",
+        "623.xalancbmk_s" : "xalancbmk",
+        "625.x264_s" : "x264",
+        "631.deepsjeng_s" : "deepsjeng",
+        "641.leela_s" : "leela",
+        "648.exchange2_s" : "exchange2",
+        "657.xz_s" : "xz"
+}
+
 def loadFiles(files):
     fullDF = None
     for name, path in files.items():
         newDF = pd.read_csv(path, index_col=0)
+        newDF.index.rename("Benchmark", inplace=True)
         newDF = newDF.assign(Experiment=name).set_index('Experiment',append=True).swaplevel(0,1)
 
         if fullDF is None:
@@ -26,12 +50,31 @@ def loadFiles(files):
         else:
             fullDF = fullDF.append(newDF)
 
+    fullDF.rename(index=speedCleanName, inplace=True)
     return fullDF
+
+def make_hatches(ax, df):
+    hatches = [h*len(df.index) for h in [['//'], ['-'], ['x'], ['\\'], ['||'], ['+'], ['o'], ['.']]]
+    hatches = sum(hatches, [])
+
+    if len(hatches) < len(ax.patches):
+        print("Not enough hatches defined")
+        
+    for i,bar in enumerate(ax.patches):
+        bar.set_hatch(hatches[i])
+    ax.legend()
+
+# hatches=["//" , "--", "//" , "+" , "-", ".", "*","x", "o", "O" ]
 
 def plotRes(res):
     scores = resDF.loc[pd.IndexSlice[:,:], "score"].unstack(level=0)
-    # print(scores)
-    scores.plot(kind="bar").get_figure().savefig("result.pdf", bbox_inches = "tight", format="pdf")
+
+    plot = scores.plot(kind="bar")
+    make_hatches(plot, scores)
+    plot.set_ylabel("SPEC Score")
+
+    plot.get_figure().savefig("result.pdf", bbox_inches = "tight", format="pdf")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare results from multiple runs of the spec workload")
