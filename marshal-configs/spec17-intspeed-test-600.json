@@ -6,10 +6,11 @@
   "overlay" : "speckle/build/overlay/intspeed/test",
   "rootfs-size" : "3GiB",
   "outputs" : ["/output"],
+  "post_run_hook" : "handle-results.py -d test -s intspeed",
   "jobs" : [
     {
-      "name": "600.perlbench_s",
-      "command": "./intspeed.sh 600.perlbench_s --threads 1"
+      "name": "657.xz_s-cld",
+      "command": "./intspeed.sh 657.xz_s --workload 1 --threads 1"
     }
   ]
 }

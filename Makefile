@@ -16,8 +16,10 @@ $(SPECKLE_DIR)/build/overlay/%/$(INPUT):
 	cd $(SPECKLE_DIR) && ./gen_binaries.sh --compile --suite $* --input $(INPUT)
 
 spec17-%: $(SPECKLE_DIR)/build/overlay/%/$(INPUT);
+	echo $^
 
 clean:
 	rm -rf $(SPECKLE_DIR)/build
 
 .PHONY: $(spec17_overlays) $(spec17_rootfs_dirs) clean
+.PRECIOUS: $(SPECKLE_DIR)/build/overlay/%/$(INPUT)
