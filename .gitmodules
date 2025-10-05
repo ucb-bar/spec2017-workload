@@ -1,3 +1,3 @@
 [submodule "speckle"]
 	path = speckle
-	url = https://github.com/ccelio/Speckle.git
+	url = https://github.com/riscv-tacit/Speckle.git
