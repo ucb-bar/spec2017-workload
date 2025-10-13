@@ -78,16 +78,22 @@ def handleSpeed(outDir, dataset):
     resDF = None
     for csvFile in outDir.glob("*/output/*.csv"):
         if resDF is None:
-            resDF = pd.read_csv(csvFile, index_col=0)
+            resDF = pd.read_csv(csvFile, index_col=0).tail(1)
         else:
-            resDF = resDF.append(pd.read_csv(csvFile, index_col=0))
+            resDF = resDF._append(pd.read_csv(csvFile, index_col=0).tail(1))
 
+    # Reconvert values form string to float64
+    cols = ["RealTime", "UserTime", "KernelTime"]
+    resDF[cols] = resDF[cols].apply(pd.to_numeric, errors="coerce")
+    
     # To speed up the firesim run, xz is split into multiple concurrent runs of
     # different parts of the benchmark. We just recombine here.
-    resDF.loc['657.xz_s', :] = resDF.loc['657.xz_s_0', :] + resDF.loc['657.xz_s_1', :]
-    resDF.drop(['657.xz_s_0','657.xz_s_1'], inplace=True)
+    if '657.xz_s_0' in resDF.index and '657.xz_s_1' in resDF.index:
+        resDF.loc['657.xz_s', :] = resDF.loc['657.xz_s_0', :] + resDF.loc['657.xz_s_1', :]
+        resDF.drop(['657.xz_s_0','657.xz_s_1'], inplace=True)
 
-    resDF['score'] = baseline['RealTime'] / resDF['RealTime']
+    for index in resDF.index:
+        resDF.loc[index, 'score'] = baseline.loc[index, 'RealTime'] / resDF.loc[index, 'RealTime']
     resDF.sort_index(inplace=True)
     return resDF
 
@@ -96,12 +102,17 @@ def handleRate(outDir):
     resDF = None
     for csvFile in outDir.glob("*/output/*.csv"):
         if resDF is None:
-            resDF = pd.read_csv(csvFile)
+            resDF = pd.read_csv(csvFile).tail(1)
         else:
-            resDF = resDF.append(pd.read_csv(csvFile))
+            resDF = pd.concat([resDF, pd.read_csv(csvFile).tail(1)], ignore_index=True)
 
+    resDF.reset_index(drop=True, inplace=True)
     nameGroups = resDF.groupby(['name'])
 
+    # Reconvert values form string to float64
+    cols = ["RealTime", "UserTime", "KernelTime"]
+    resDF[cols] = resDF[cols].apply(pd.to_numeric, errors="coerce")
+    
     resDF = resDF[nameGroups['RealTime'].transform(max) == resDF['RealTime']].copy()
     resDF.drop('copy', axis=1, inplace=True)
     resDF.set_index('name', inplace=True)
