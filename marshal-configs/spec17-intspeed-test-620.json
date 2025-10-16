@@ -1,0 +1,21 @@
+{
+  "name" : "spec17-intspeed-test",
+  "base" : "br-base.json",
+  "workdir" : "..",
+  "host-init" : "build-intspeed.sh test",
+  "overlay" : "speckle/build/overlay/intspeed/test",
+  "rootfs-size" : "3GiB",
+  "outputs" : ["/output"],
+  "post_run_hook" : "handle-results.py -d test -s intspeed",
+  "jobs" : [
+    {
+      "name" : "run-chores",
+      "outputs" : [ "/root/chores/driver_map.txt", "/root/chores/jump_label_patch_map.txt" ],
+      "command" : "./run-chores.sh"
+    },
+    {
+      "name": "620.omnetpp_s",
+      "command": "./intspeed.sh 620.omnetpp_s --threads 1"
+    }
+  ]
+}
