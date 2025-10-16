@@ -84,8 +84,8 @@ def handleSpeed(outDir, dataset):
 
     # To speed up the firesim run, xz is split into multiple concurrent runs of
     # different parts of the benchmark. We just recombine here.
-    resDF.loc['657.xz_s', :] = resDF.loc['657.xz_s_0', :] + resDF.loc['657.xz_s_1', :]
-    resDF.drop(['657.xz_s_0','657.xz_s_1'], inplace=True)
+    # resDF.loc['657.xz_s', :] = resDF.loc['657.xz_s_0', :] + resDF.loc['657.xz_s_1', :]
+    # resDF.drop(['657.xz_s_0','657.xz_s_1'], inplace=True)
 
     resDF['score'] = baseline['RealTime'] / resDF['RealTime']
     resDF.sort_index(inplace=True)
