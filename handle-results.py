@@ -80,7 +80,7 @@ def handleSpeed(outDir, dataset):
         if resDF is None:
             resDF = pd.read_csv(csvFile, index_col=0).tail(1)
         else:
-            resDF = resDF._append(pd.read_csv(csvFile, index_col=0).tail(1))
+            resDF = pd.concat([resDF, pd.read_csv(csvFile, index_col=0).tail(1)])
 
     # Reconvert values form string to float64
     cols = ["RealTime", "UserTime", "KernelTime"]
