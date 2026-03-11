@@ -77,6 +77,8 @@ def handleSpeed(outDir, dataset):
  
     resDF = None
     for csvFile in outDir.glob("*/output/*.csv"):
+        if '_tma_before.csv' in csvFile.name or '_tma_after.csv' in csvFile.name:
+            continue
         if resDF is None:
             resDF = pd.read_csv(csvFile, index_col=0).tail(1)
         else:
@@ -123,6 +125,30 @@ def handleRate(outDir):
     return resDF
 
 
+def handleTMA(outDir):
+    """Process TMA counter before/after CSVs and compute per-benchmark deltas."""
+    tma_rows = []
+    for beforeFile in outDir.glob("*/output/*_tma_before.csv"):
+        bmark_name = beforeFile.name.replace("_tma_before.csv", "")
+        afterFile = beforeFile.parent / f"{bmark_name}_tma_after.csv"
+        if not afterFile.exists():
+            continue
+        try:
+            before = pd.read_csv(beforeFile, index_col=0)
+            after = pd.read_csv(afterFile, index_col=0)
+            delta = after['value'] - before['value']
+            delta.name = bmark_name
+            tma_rows.append(delta)
+        except Exception as e:
+            print(f"Warning: could not process TMA for {bmark_name}: {e}")
+    if tma_rows:
+        tmaDF = pd.DataFrame(tma_rows)
+        tmaDF.index.name = 'name'
+        tmaDF.sort_index(inplace=True)
+        return tmaDF
+    return None
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Aggregate results from a run of a SPEC suite")
     parser.add_argument('-s', '--suite', required=True, choices=['intspeed', 'intrate'], help="Which suite was run.")
@@ -141,4 +167,12 @@ if __name__ == "__main__":
 
     plot = resDF['score'].plot(kind="bar", title="SPEC Score")
     plot.get_figure().savefig(args.outputPath / "results.pdf", bbox_inches = "tight")
+
+    # Process TMA counters if available
+    tmaDF = handleTMA(args.outputPath)
+    if tmaDF is not None:
+        with open(args.outputPath / "tma_results.csv", "w") as f:
+            f.write(tmaDF.to_csv())
+        print("TMA results available in: ", args.outputPath / "tma_results.csv")
+
     print("Output available in: ", args.outputPath)
