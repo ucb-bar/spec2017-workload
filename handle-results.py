@@ -144,6 +144,7 @@ def handleTMA(outDir):
     if tma_rows:
         tmaDF = pd.DataFrame(tma_rows)
         tmaDF.index.name = 'name'
+        tmaDF.insert(tmaDF.columns.get_loc('instret') + 1, 'IPC', tmaDF['instret'] / tmaDF['cycles'])
         tmaDF.sort_index(inplace=True)
         return tmaDF
     return None
