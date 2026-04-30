@@ -14,19 +14,23 @@ TMA_COUNTERS_DIR ?= $(CURDIR)/../../tests/tmatests
 spec17_suites = intrate intspeed
 spec17_rootfs_dirs = $(patsubst %, spec17-%, $(spec17-suites))
 
-# Cross-compile tma_reader so gen_binaries.sh picks it up automatically
-# Counter definitions come from tma_counters.h (single source of truth)
-$(SPECKLE_DIR)/tma_reader: $(SPECKLE_DIR)/tma_reader.c $(TMA_COUNTERS_DIR)/tma_counters.h
-	$(CROSS_COMPILE)gcc -O2 -static -I$(TMA_COUNTERS_DIR) -o $@ $<
+# Cross-compile tma_inject.o (ctor/dtor pair sourced from
+# tests/tmatests/tma_inject.c). SPEC's runcpu links it into every speed
+# benchmark via EXTRA_LIBS (see speckle/riscv.cfg). Flags must match SPEC's
+# riscv.cfg (rv64imafdc / lp64d) so the .o is ABI-compatible with the rest.
+$(SPECKLE_DIR)/tma_inject.o: $(TMA_COUNTERS_DIR)/tma_inject.c $(TMA_COUNTERS_DIR)/tma_counters.h
+	$(CROSS_COMPILE)gcc -O2 -c -march=rv64imafdc -mabi=lp64d \
+	    -I$(TMA_COUNTERS_DIR) -o $@ $<
 
-$(SPECKLE_DIR)/build/overlay/%/$(INPUT): $(SPECKLE_DIR)/tma_reader
-	cd $(SPECKLE_DIR) && ./gen_binaries.sh --compile --suite $* --input $(INPUT)
+$(SPECKLE_DIR)/build/overlay/%/$(INPUT): $(SPECKLE_DIR)/tma_inject.o
+	cd $(SPECKLE_DIR) && TMA_INJECT_OBJ=$(abspath $(SPECKLE_DIR)/tma_inject.o) \
+	    ./gen_binaries.sh --compile --suite $* --input $(INPUT)
 
 spec17-%: $(SPECKLE_DIR)/build/overlay/%/$(INPUT);
 	echo $^
 
 clean:
-	rm -rf $(SPECKLE_DIR)/build $(SPECKLE_DIR)/tma_reader
+	rm -rf $(SPECKLE_DIR)/build $(SPECKLE_DIR)/tma_inject.o
 
 .PHONY: $(spec17_overlays) $(spec17_rootfs_dirs) clean
 .PRECIOUS: $(SPECKLE_DIR)/build/overlay/%/$(INPUT)

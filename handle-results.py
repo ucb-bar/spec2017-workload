@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import sys
 import pandas as pd
 import argparse
@@ -35,21 +36,6 @@ specSpeedReference = pd.DataFrame.from_dict({
     "657.xz_s" : 6182
     }, orient='index', columns=['RealTime'])
 
-# This is taken from agfi-0fa2162c2c1a475d4
-# (firesim-rocket-quadcore-no-nic-l2-llc4mb-ddr3 circa oct 13 2020)
-# specSpeedTest = pd.DataFrame.from_dict({
-#     "600.perlbench_s" : 59.87,
-#     "602.gcc_s" : 0.04,
-#     "605.mcf_s" : 32.12,
-#     "620.omnetpp_s" : 10.15,
-#     "623.xalancbmk_s" : 0.31,
-#     "625.x264_s" : 188.23,
-#     "631.deepsjeng_s" : 31.40,
-#     "641.leela_s" : 12.17,
-#     "648.exchange2_s" : 31.59,
-#     "657.xz_s" : 3.71 # note that the marshal workload splits xz into two jobs to save some runtime, these are recombined during load
-#     }, orient='index', columns=['RealTime'])
-
 # Pieced together from the spec repo: spec2017/benchspec/CPU/*/data/test/reftime
 specSpeedTest = pd.DataFrame.from_dict({
     "600.perlbench_s" : 74,
@@ -74,11 +60,9 @@ def handleSpeed(outDir, dataset):
         if not baselinePath.exists():
             raise RuntimeError("Baseline csv doesn't exist: ", dataset)
         baseline = pd.read_csv(baselinePath, index_col=0)
- 
+
     resDF = None
     for csvFile in outDir.glob("*/output/*.csv"):
-        if '_tma_before.csv' in csvFile.name or '_tma_after.csv' in csvFile.name:
-            continue
         if resDF is None:
             resDF = pd.read_csv(csvFile, index_col=0).tail(1)
         else:
@@ -87,7 +71,7 @@ def handleSpeed(outDir, dataset):
     # Reconvert values form string to float64
     cols = ["RealTime", "UserTime", "KernelTime"]
     resDF[cols] = resDF[cols].apply(pd.to_numeric, errors="coerce")
-    
+
     # To speed up the firesim run, xz is split into multiple concurrent runs of
     # different parts of the benchmark. We just recombine here.
     if '657.xz_s_0' in resDF.index and '657.xz_s_1' in resDF.index:
@@ -114,7 +98,7 @@ def handleRate(outDir):
     # Reconvert values form string to float64
     cols = ["RealTime", "UserTime", "KernelTime"]
     resDF[cols] = resDF[cols].apply(pd.to_numeric, errors="coerce")
-    
+
     resDF = resDF[nameGroups['RealTime'].transform(max) == resDF['RealTime']].copy()
     resDF.drop('copy', axis=1, inplace=True)
     resDF.set_index('name', inplace=True)
@@ -125,29 +109,109 @@ def handleRate(outDir):
     return resDF
 
 
+# ---------------------------------------------------------------------------
+# TMA: parse the printf blocks emitted by tma_inject.c's dtor. Every speed
+# binary has tma_inject.o (linked via riscv.cfg EXTRA_LIBS); its ctor
+# captures snapshot1 before main() and its dtor captures snapshot2 + prints
+# both as CSV blocks at exit. Per-job stdout lands at <job>/uartlog.
+#
+# Format (two blocks per uartlog, snapshot1 then snapshot2):
+#   ===== TMA PERFORMANCE COUNTERS =====
+#   counter,value
+#   cycles,12345
+#   instret,6789
+#   ...
+#   ====================================
+#
+# Legacy SynthesizePrintf format (a single `name = value` block) is also
+# accepted as a fallback for old binaries / pre-software-printf runs.
+# ---------------------------------------------------------------------------
+
+_TMA_HEADER     = re.compile(r"^={5} TMA PERFORMANCE COUNTERS ={5}\s*$")
+_TMA_FOOTER     = re.compile(r"^={36}\s*$")
+_TMA_CSV_HEADER = re.compile(r"^counter,value\s*$")
+_TMA_LINE_CSV   = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*),(\d+)\s*$")
+_TMA_LINE_KV    = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)\s*$")
+
+
+def _parseTMAblocks(text):
+    """Parse all TMA blocks in `text`, in document order. Each block is
+    delimited by a `===== TMA PERFORMANCE COUNTERS =====` header and a
+    36-equals footer. Payload rows match either the new CSV format
+    (`name,value`) or the legacy synth-printf format (`name = value`); the
+    `counter,value` CSV column header is skipped.
+
+    Returns list of dict[counter_name, int]."""
+    blocks = []
+    cur = None
+    for line in text.splitlines():
+        if _TMA_HEADER.match(line):
+            cur = {}
+            continue
+        if cur is not None and _TMA_FOOTER.match(line):
+            blocks.append(cur)
+            cur = None
+            continue
+        if cur is not None:
+            if _TMA_CSV_HEADER.match(line):
+                continue
+            m = _TMA_LINE_CSV.match(line) or _TMA_LINE_KV.match(line)
+            if m:
+                cur[m.group(1)] = int(m.group(2))
+    return blocks
+
+
+def _parseTMAblock(text):
+    """Return dict[counter_name, int] of (snapshot2 - snapshot1) deltas for
+    the two CSV blocks tma_inject.c's dtor emits. If only one block is
+    found (legacy synth-printf path), return that block's values directly.
+    Return None if no block."""
+    blocks = _parseTMAblocks(text)
+    if not blocks:
+        return None
+    if len(blocks) == 1:
+        return blocks[0]
+    s1, s2 = blocks[0], blocks[-1]
+    return {k: s2[k] - s1[k] for k in (set(s1) & set(s2))}
+
+
+def _findConsoleLog(jobDir):
+    """firemarshal writes <job>/uartlog (launch.py:136); fall back to any
+    *.log under the job dir for FireSim-cloud-style harnesses."""
+    uartlog = jobDir / "uartlog"
+    if uartlog.exists():
+        return uartlog
+    for cand in jobDir.glob("*.log"):
+        return cand
+    return None
+
+
 def handleTMA(outDir):
-    """Process TMA counter before/after CSVs and compute per-benchmark deltas."""
-    tma_rows = []
-    for beforeFile in outDir.glob("*/output/*_tma_before.csv"):
-        bmark_name = beforeFile.name.replace("_tma_before.csv", "")
-        afterFile = beforeFile.parent / f"{bmark_name}_tma_after.csv"
-        if not afterFile.exists():
+    rows = []
+    for jobDir in sorted(p for p in outDir.iterdir() if p.is_dir()):
+        log = _findConsoleLog(jobDir)
+        if log is None:
             continue
         try:
-            before = pd.read_csv(beforeFile, index_col=0)
-            after = pd.read_csv(afterFile, index_col=0)
-            delta = after['value'] - before['value']
-            delta.name = bmark_name
-            tma_rows.append(delta)
+            text = log.read_text(errors="replace")
         except Exception as e:
-            print(f"Warning: could not process TMA for {bmark_name}: {e}")
-    if tma_rows:
-        tmaDF = pd.DataFrame(tma_rows)
-        tmaDF.index.name = 'name'
-        tmaDF.insert(tmaDF.columns.get_loc('instret') + 1, 'IPC', tmaDF['instret'] / tmaDF['cycles'])
-        tmaDF.sort_index(inplace=True)
-        return tmaDF
-    return None
+            print(f"Warning: cannot read {log}: {e}")
+            continue
+        counters = _parseTMAblock(text)
+        if counters is None:
+            continue
+        rows.append(pd.Series(counters, name=jobDir.name))
+    if not rows:
+        return None
+    tmaDF = pd.DataFrame(rows)
+    tmaDF.index.name = 'name'
+    tmaDF.sort_index(inplace=True)
+    if 'instret' in tmaDF.columns and 'cycles' in tmaDF.columns:
+        ipc = tmaDF['instret'] / tmaDF['cycles']
+        insert_after = max(tmaDF.columns.get_loc('instret'),
+                           tmaDF.columns.get_loc('cycles'))
+        tmaDF.insert(insert_after + 1, 'IPC', ipc)
+    return tmaDF
 
 
 if __name__ == "__main__":
@@ -169,7 +233,8 @@ if __name__ == "__main__":
     plot = resDF['score'].plot(kind="bar", title="SPEC Score")
     plot.get_figure().savefig(args.outputPath / "results.pdf", bbox_inches = "tight")
 
-    # Process TMA counters if available
+    # Process TMA counters if available (intspeed only — intrate isn't
+    # instrumented; see riscv.cfg `intspeed,fpspeed:` block)
     tmaDF = handleTMA(args.outputPath)
     if tmaDF is not None:
         with open(args.outputPath / "tma_results.csv", "w") as f:
