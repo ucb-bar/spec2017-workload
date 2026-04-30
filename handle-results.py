@@ -110,44 +110,69 @@ def handleRate(outDir):
 
 
 # ---------------------------------------------------------------------------
-# TMA: parse the synthesized-printf block emitted by BoomPerfCounterDevice's
-# TMA_CTL_DUMP path. Every speed binary has tma_inject.o (linked via riscv.cfg
-# EXTRA_LIBS); its dtor fires the dump at exit. The block lands on the
-# simulator console — captured by firemarshal at <job>/uartlog
-# (launch.py:136), or by FireSim in its per-sim console log.
+# TMA: parse the printf blocks emitted by tma_inject.c's dtor. Every speed
+# binary has tma_inject.o (linked via riscv.cfg EXTRA_LIBS); its ctor
+# captures snapshot1 before main() and its dtor captures snapshot2 + prints
+# both as CSV blocks at exit. Per-job stdout lands at <job>/uartlog.
 #
-# Format from generators/boom/.../BoomPerfCounterDevice.scala:241-246:
+# Format (two blocks per uartlog, snapshot1 then snapshot2):
 #   ===== TMA PERFORMANCE COUNTERS =====
-#                     cycles = 12345
-#                    instret = 6789
-#                    ...
+#   counter,value
+#   cycles,12345
+#   instret,6789
+#   ...
 #   ====================================
+#
+# Legacy SynthesizePrintf format (a single `name = value` block) is also
+# accepted as a fallback for old binaries / pre-software-printf runs.
 # ---------------------------------------------------------------------------
 
-_TMA_HEADER = re.compile(r"^={5} TMA PERFORMANCE COUNTERS ={5}\s*$")
-_TMA_FOOTER = re.compile(r"^={36}\s*$")
-_TMA_LINE   = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)\s*$")
+_TMA_HEADER     = re.compile(r"^={5} TMA PERFORMANCE COUNTERS ={5}\s*$")
+_TMA_FOOTER     = re.compile(r"^={36}\s*$")
+_TMA_CSV_HEADER = re.compile(r"^counter,value\s*$")
+_TMA_LINE_CSV   = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*),(\d+)\s*$")
+_TMA_LINE_KV    = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)\s*$")
+
+
+def _parseTMAblocks(text):
+    """Parse all TMA blocks in `text`, in document order. Each block is
+    delimited by a `===== TMA PERFORMANCE COUNTERS =====` header and a
+    36-equals footer. Payload rows match either the new CSV format
+    (`name,value`) or the legacy synth-printf format (`name = value`); the
+    `counter,value` CSV column header is skipped.
+
+    Returns list of dict[counter_name, int]."""
+    blocks = []
+    cur = None
+    for line in text.splitlines():
+        if _TMA_HEADER.match(line):
+            cur = {}
+            continue
+        if cur is not None and _TMA_FOOTER.match(line):
+            blocks.append(cur)
+            cur = None
+            continue
+        if cur is not None:
+            if _TMA_CSV_HEADER.match(line):
+                continue
+            m = _TMA_LINE_CSV.match(line) or _TMA_LINE_KV.match(line)
+            if m:
+                cur[m.group(1)] = int(m.group(2))
+    return blocks
 
 
 def _parseTMAblock(text):
-    """Return dict[counter_name, int] for the *last* TMA block in `text`,
-    or None if none found."""
-    block = None
-    in_block = False
-    cur = {}
-    for line in text.splitlines():
-        if _TMA_HEADER.match(line):
-            in_block, cur = True, {}
-            continue
-        if in_block and _TMA_FOOTER.match(line):
-            block = cur
-            in_block = False
-            continue
-        if in_block:
-            m = _TMA_LINE.match(line)
-            if m:
-                cur[m.group(1)] = int(m.group(2))
-    return block
+    """Return dict[counter_name, int] of (snapshot2 - snapshot1) deltas for
+    the two CSV blocks tma_inject.c's dtor emits. If only one block is
+    found (legacy synth-printf path), return that block's values directly.
+    Return None if no block."""
+    blocks = _parseTMAblocks(text)
+    if not blocks:
+        return None
+    if len(blocks) == 1:
+        return blocks[0]
+    s1, s2 = blocks[0], blocks[-1]
+    return {k: s2[k] - s1[k] for k in (set(s1) & set(s2))}
 
 
 def _findConsoleLog(jobDir):
